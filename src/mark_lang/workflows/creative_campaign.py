@@ -40,13 +40,25 @@ except Exception:  # pragma: no cover - optional dependency path
             return runner
 
 
+from typing import TypedDict
+
 from ..brand_center.api_client import BrandCenterClient, BrandGuidelines
 from ..brief_ingest import BriefIngestor, BusinessBrief
 from ..creative_brief import CreativeBrief, CreativeBriefExtractor
 
 
+class WorkflowState(TypedDict, total=False):
+    brief: BusinessBrief
+    brand_id: str
+    creative_brief: CreativeBrief
+    guidelines: BrandGuidelines
+    campaign_plan: Dict[str, Any]
+    gaps: Dict[str, str]
+
+
 @dataclass
-class WorkflowState:
+class WorkflowStateData:
+    """Data structure for workflow state results."""
     brief: BusinessBrief
     brand_id: str
     creative_brief: CreativeBrief | None = None
@@ -67,23 +79,34 @@ class CreativeCampaignWorkflow:
         graph = StateGraph(WorkflowState)
         graph.add_node("ingest", self._ingest)
         graph.add_node("extract", self._extract)
-        graph.add_node("guidelines", self._guidelines)
+        graph.add_node("fetch_guidelines", self._guidelines)
         graph.add_node("campaign", self._campaign)
         graph.add_node("final", self._finalize)
         graph.add_edge("ingest", "extract")
-        graph.add_edge("extract", "guidelines")
-        graph.add_edge("guidelines", "campaign")
+        graph.add_edge("extract", "fetch_guidelines")
+        graph.add_edge("fetch_guidelines", "campaign")
         graph.add_edge("campaign", "final")
         graph.add_edge("final", END)
         graph.set_entry_point("ingest")
         return graph.compile()
 
-    def run(self, brief_text: str, *, title: str, brand_id: str) -> WorkflowState:
+    def run(self, brief_text: str, *, title: str, brand_id: str) -> WorkflowStateData:
         runner = self.build()
         initial_brief = self.brief_ingestor.from_text(brief_text, title=title)
-        initial_state = WorkflowState(brief=initial_brief, brand_id=brand_id)
-        result = runner(self._to_dict(initial_state))
-        return WorkflowState(**result)
+        initial_state: WorkflowState = {
+            "brief": initial_brief,
+            "brand_id": brand_id,
+            "gaps": {}
+        }
+        result = runner.invoke(initial_state)
+        return WorkflowStateData(
+            brief=result["brief"],
+            brand_id=result["brand_id"],
+            creative_brief=result.get("creative_brief"),
+            guidelines=result.get("guidelines"),
+            campaign_plan=result.get("campaign_plan"),
+            gaps=result.get("gaps", {})
+        )
 
     def _ingest(self, state: Dict[str, Any]) -> Dict[str, Any]:
         return state
@@ -133,14 +156,4 @@ class CreativeCampaignWorkflow:
         return {
             "summary": creative_brief.to_dict(),
             "channels": multi_channel,
-        }
-
-    def _to_dict(self, state: WorkflowState) -> Dict[str, Any]:
-        return {
-            "brief": state.brief,
-            "brand_id": state.brand_id,
-            "creative_brief": state.creative_brief,
-            "guidelines": state.guidelines,
-            "campaign_plan": state.campaign_plan,
-            "gaps": state.gaps,
         }

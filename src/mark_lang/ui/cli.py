@@ -9,7 +9,7 @@ from typing import Dict
 from ..brand_center.api_client import BrandGuidelines
 from ..brief_ingest import BriefIngestor
 from ..creative_brief import CreativeBriefExtractor
-from ..workflows.creative_campaign import CreativeCampaignWorkflow, WorkflowState
+from ..workflows.creative_campaign import CreativeCampaignWorkflow, WorkflowStateData
 
 
 class LocalBrandCenterClient:
@@ -43,7 +43,7 @@ class CLI:
             help="Path to JSON file containing brand guidelines map",
         )
 
-    def run(self, argv: list[str] | None = None) -> WorkflowState:
+    def run(self, argv: list[str] | None = None) -> WorkflowStateData:
         args = self.parser.parse_args(argv)
         brief_text = Path(args.brief).read_text(encoding="utf-8")
         brand_guidelines = self._load_guidelines(args.guidelines)
@@ -61,7 +61,7 @@ class CLI:
             return {}
         return json.loads(Path(path).read_text(encoding="utf-8"))
 
-    def _display(self, state: WorkflowState) -> None:  # pragma: no cover - CLI output
+    def _display(self, state: WorkflowStateData) -> None:  # pragma: no cover - CLI output
         print("Creative Brief Summary")
         print(json.dumps(state.creative_brief.to_dict(), indent=2))
         if state.gaps:
